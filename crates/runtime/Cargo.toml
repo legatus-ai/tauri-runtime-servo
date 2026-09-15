@@ -8,5 +8,15 @@ description = "Tauri webview runtime backed by the Servo engine (in-process libs
 
 [dependencies]
 tauri-runtime.workspace = true
+tauri-utils = "=2.9.3"
 tao.workspace = true
+servo = { version = "0.5", features = ["no-wgl"] }
+servo-embedder-traits = "0.5"
+euclid = "0.22"
+url = "2"
+raw-window-handle = "0.6"
+surfman = "=0.13.0"
 log = "0.4"
+
+[target."cfg(windows)".dependencies]
+windows = { version = "0.61", features = ["Win32_Foundation"] }

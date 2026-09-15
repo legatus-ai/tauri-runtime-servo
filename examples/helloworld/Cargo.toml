@@ -10,3 +10,6 @@ path = "src/main.rs"
 
 [dependencies]
 tauri-runtime-servo = { path = "../../crates/runtime" }
+tauri-runtime = "=2.11.3"
+tauri-utils = "=2.9.3"
+surfman = "=0.13.0"
