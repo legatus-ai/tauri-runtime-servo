@@ -1,0 +1,12 @@
+[package]
+name = "tauri-runtime-servo"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Tauri webview runtime backed by the Servo engine (in-process libservo)"
+
+[dependencies]
+tauri-runtime.workspace = true
+tao.workspace = true
+log = "0.4"
