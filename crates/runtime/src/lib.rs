@@ -6,6 +6,7 @@
 //! else — every operation travels through the Tao event-loop proxy as a
 //! [`RuntimeMessage`] and is applied on the main thread.
 
+pub mod ipc;
 mod webview;
 mod window;
 
@@ -46,12 +47,28 @@ pub struct WebviewPlan {
   pub use_https_scheme: bool,
 }
 
+/// Tauri fills `PendingWebview::url` unless the caller only set attributes
+/// (then it stays at the `"tauri://localhost"` default).
+const DEFAULT_PENDING_URL: &str = "tauri://localhost";
+
 /// Extract the thread-safe creation plan from a pending webview. Everything
 /// else (protocol handlers, IPC closures, platform views) is Phase 2+.
 fn extract_plan<T: UserEvent>(pending: PendingWebview<T, ServoRuntime<T>>) -> WebviewPlan {
+  use tauri_utils::config::WebviewUrl;
+  let attribute_url = match &pending.webview_attributes.url {
+    WebviewUrl::External(url) | WebviewUrl::CustomProtocol(url) => Some(url.to_string()),
+    WebviewUrl::App(path) => url::Url::from_file_path(path)
+      .ok()
+      .map(|url| url.to_string()),
+    _ => None,
+  };
+  let url = match attribute_url {
+    Some(url) if pending.url == DEFAULT_PENDING_URL => url,
+    _ => pending.url,
+  };
   WebviewPlan {
     label: pending.label,
-    url: pending.url,
+    url,
     use_https_scheme: pending.webview_attributes.use_https_scheme,
   }
 }
@@ -112,9 +129,22 @@ pub enum TaoMessage<T: UserEvent> {
 /// notably NOT the display handle (`RawDisplayHandle` is `!Send`). Display
 /// handles are resolved on the main thread per webview creation.
 /// Live objects live on the main thread in [`MainState`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Shared<T: UserEvent> {
   pub proxy: tao::event_loop::EventLoopProxy<TaoMessage<T>>,
+  /// Process-wide IPC dispatch table. Cloned into every webview entry and
+  /// into the Servo `ipc://` protocol handler at engine build time, so
+  /// commands registered at any point go live for all views.
+  pub ipc: crate::ipc::IpcRegistry,
+}
+
+impl<T: UserEvent> std::fmt::Debug for Shared<T> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("Shared")
+      .field("proxy", &self.proxy)
+      .field("ipc_commands", &self.ipc.lock().map(|map| map.len()).unwrap_or(0))
+      .finish()
+  }
 }
 
 impl<T: UserEvent> Shared<T> {
@@ -311,7 +341,10 @@ impl<T: UserEvent> Runtime<T> for ServoRuntime<T> {
     Ok(Self {
       proxy: proxy.clone(),
       event_loop: Some(event_loop),
-      shared: Arc::new(Shared { proxy }),
+      shared: Arc::new(Shared {
+        proxy,
+        ipc: crate::ipc::registry(),
+      }),
       main_thread: std::thread::current().id(),
     })
   }
@@ -455,8 +488,9 @@ fn build_view<T: UserEvent>(
     .windows
     .get_mut(window_id)
     .ok_or(Error::CreateWebview("unknown window".into()))?;
-  let servo = webview::ensure_servo(&mut state.servo, &shared.proxy);
+  let servo = webview::ensure_servo(&mut state.servo, shared);
   let url = initial_url(plan);
+  let ipc = shared.ipc.clone();
   let (view, _rendering_context) =
     webview::create_view(servo, &shared.proxy, &entry.window, display, url)?;
   let dispatcher = ServoWebviewDispatcher {
@@ -469,6 +503,7 @@ fn build_view<T: UserEvent>(
     view,
     handlers: HashMap::new(),
     next_handler_id: 0,
+    ipc,
   });
   Ok(DetachedWebview {
     label: plan.label.clone(),

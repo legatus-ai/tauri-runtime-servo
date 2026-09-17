@@ -35,6 +35,7 @@ pub struct WebviewEntry {
   pub view: WebView,
   pub handlers: HashMap<WebviewEventId, SharedWebviewHandler>,
   pub next_handler_id: WebviewEventId,
+  pub ipc: crate::ipc::IpcRegistry,
 }
 
 impl std::fmt::Debug for WebviewEntry {
@@ -94,30 +95,54 @@ impl<T: UserEvent> EventLoopWaker for ServoWaker<T> {
   }
 }
 
-/// Requests a Tao redraw whenever Servo produces a frame. Goes through the
-/// event-loop proxy so the delegate never touches windowing objects.
-#[derive(Debug, Clone)]
-struct FrameDelegate<T: UserEvent> {
+/// Per-webview delegate: redraw requests. IPC is served by the `ipc://`
+/// protocol handler (see [`crate::ipc`]), not by load interception — the
+/// delegate declines every load so the pipeline reaches the handler.
+#[derive(Clone)]
+struct LegatusDelegate<T: UserEvent> {
   proxy: tao::event_loop::EventLoopProxy<crate::TaoMessage<T>>,
   window_id: tao::window::WindowId,
 }
 
-impl<T: UserEvent> servo::WebViewDelegate for FrameDelegate<T> {
+impl<T: UserEvent> std::fmt::Debug for LegatusDelegate<T> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("LegatusDelegate")
+      .field("window_id", &self.window_id)
+      .finish_non_exhaustive()
+  }
+}
+
+impl<T: UserEvent> servo::WebViewDelegate for LegatusDelegate<T> {
   fn notify_new_frame_ready(&self, _: WebView) {
     let _ = self.proxy.send_event(crate::TaoMessage::RequestRedraw(self.window_id));
+  }
+
+  fn load_web_resource(&self, _webview: WebView, _load: servo::WebResourceLoad) {
+    // Decline everything (dropping the load falls through to default
+    // handling). `ipc://` calls are served by the protocol handler
+    // registered on the Servo builder, which also carries the
+    // mixed-content exemption.
   }
 }
 
 /// Build the shared Servo instance on first use. Must run on the main thread.
 pub fn ensure_servo<'a, T: UserEvent>(
   servo: &'a mut Option<Servo>,
-  proxy: &tao::event_loop::EventLoopProxy<crate::TaoMessage<T>>,
+  shared: &crate::Shared<T>,
 ) -> &'a Servo {
   if servo.is_none() {
+    let mut protocols = servo::protocol_handler::ProtocolRegistry::default();
+    if let Err(error) = protocols.register(
+      crate::ipc::IPC_SCHEME,
+      crate::ipc::IpcProtocolHandler::new(shared.ipc.clone()),
+    ) {
+      log::error!("servo runtime: failed to register ipc protocol: {error:?}");
+    }
     let instance = ServoBuilder::default()
       .event_loop_waker(Box::new(ServoWaker {
-        proxy: proxy.clone(),
+        proxy: shared.proxy.clone(),
       }))
+      .protocol_registry(protocols)
       .build();
     instance.setup_logging();
     *servo = Some(instance);
@@ -126,6 +151,7 @@ pub fn ensure_servo<'a, T: UserEvent>(
 }
 
 /// Create a Servo webview filling `window`. Must run on the main thread.
+#[allow(clippy::too_many_arguments)]
 pub fn create_view<T: UserEvent>(
   servo: &Servo,
   proxy: &tao::event_loop::EventLoopProxy<crate::TaoMessage<T>>,
@@ -144,16 +170,46 @@ pub fn create_view<T: UserEvent>(
       .map_err(|e| Error::CreateWebview(format!("no rendering context: {e:?}").into()))?,
   );
   let _ = rendering_context.make_current();
-  let delegate = Rc::new(FrameDelegate::<T> {
+  let delegate = Rc::new(LegatusDelegate::<T> {
     proxy: proxy.clone(),
     window_id: window.id(),
   });
+  // The builder creates no content manager by default; ours carries the IPC
+  // helper script into every page.
+  let content_manager = Rc::new(servo::UserContentManager::new(servo));
+  content_manager.add_script(Rc::new(servo::UserScript::new(
+    crate::ipc::INIT_SCRIPT.to_string(),
+    None,
+  )));
   let view = WebViewBuilder::new(servo, rendering_context.clone())
     .url(url)
     .hidpi_scale_factor(euclid::Scale::new(window.scale_factor() as f32))
     .delegate(delegate)
+    .user_content_manager(content_manager)
     .build();
   Ok((view, rendering_context))
+}
+
+/// Convert an evaluated [`JSValue`](servo::JSValue) to JSON text.
+pub fn jsvalue_to_json(value: &servo::JSValue) -> serde_json::Value {
+  use servo::JSValue as J;
+  match value {
+    J::Undefined | J::Null => serde_json::Value::Null,
+    J::Boolean(b) => serde_json::Value::Bool(*b),
+    J::Number(n) => serde_json::Number::from_f64(*n)
+      .map(serde_json::Value::Number)
+      .unwrap_or(serde_json::Value::Null),
+    J::String(s) | J::Element(s) | J::ShadowRoot(s) | J::Frame(s) | J::Window(s) => {
+      serde_json::Value::String(s.clone())
+    }
+    J::Array(items) => serde_json::Value::Array(items.iter().map(jsvalue_to_json).collect()),
+    J::Object(entries) => serde_json::Value::Object(
+      entries
+        .iter()
+        .map(|(key, item)| (key.clone(), jsvalue_to_json(item)))
+        .collect(),
+    ),
+  }
 }
 
 /// A webview operation applied on the main thread.
@@ -165,6 +221,14 @@ pub enum WebviewOp {
   GoForward,
   EvalScript {
     script: String,
+  },
+  EvalScriptWithCallback {
+    script: String,
+    tx: SyncSender<String>,
+  },
+  RegisterIpc {
+    command: String,
+    handler: crate::ipc::IpcHandler,
   },
   Close,
   OnEvent {
@@ -246,6 +310,22 @@ pub fn apply(views: &mut Webviews, label: &str, op: WebviewOp) {
     }
     WebviewOp::EvalScript { script } => {
       view.evaluate_javascript(script, |_| {});
+    }
+    WebviewOp::EvalScriptWithCallback { script, tx } => {
+      view.evaluate_javascript(script, move |result| {
+        let json = match result {
+          Ok(value) => serde_json::to_string(&jsvalue_to_json(&value))
+            .unwrap_or_else(|_| "null".to_string()),
+          Err(error) => serde_json::to_string(&format!("eval error: {error:?}"))
+            .unwrap_or_else(|_| "\"eval error\"".to_string()),
+        };
+        let _ = tx.send(json);
+      });
+    }
+    WebviewOp::RegisterIpc { command, handler } => {
+      if let Ok(mut registry) = entry.ipc.lock() {
+        registry.insert(command, handler);
+      }
     }
     WebviewOp::Close | WebviewOp::Hide | WebviewOp::Show | WebviewOp::SetFocus => {
       log::warn!("servo runtime: webview visibility op is a no-op (single-view window)");
@@ -361,13 +441,20 @@ impl<T: UserEvent> tauri_runtime::WebviewDispatch<T> for ServoWebviewDispatcher<
   fn eval_script_with_callback<S: Into<String>>(
     &self,
     script: S,
-    _callback: impl Fn(String) + Send + 'static,
+    callback: impl Fn(String) + Send + 'static,
   ) -> Result<()> {
-    // Phase 2: needs the script-completion plumbing from Servo's evaluate
-    // callback. Fire-and-forget for now.
-    self.send(WebviewOp::EvalScript {
+    let (tx, rx) = sync_channel(1);
+    self.send(WebviewOp::EvalScriptWithCallback {
       script: script.into(),
-    })
+      tx,
+    })?;
+    // The callback must fire asynchronously: the completion arrives on the
+    // main thread while this thread may hold no lock guarantees.
+    std::thread::spawn(move || {
+      let json = rx.recv().unwrap_or_else(|_| "null".to_string());
+      callback(json);
+    });
+    Ok(())
   }
 
   fn reparent(&self, _window_id: WindowId) -> Result<()> {
@@ -404,5 +491,21 @@ impl<T: UserEvent> tauri_runtime::WebviewDispatch<T> for ServoWebviewDispatcher<
 
   fn clear_all_browsing_data(&self) -> Result<()> {
     Err(unsupported("browsing data clearing"))
+  }
+}
+
+impl<T: UserEvent> ServoWebviewDispatcher<T> {
+  /// Register an IPC command handler on this webview. Extension beyond the
+  /// Tauri trait surface; the future Tauri-core integration calls this per
+  /// `invoke_handler` entry.
+  pub fn register_ipc_handler(
+    &self,
+    command: impl Into<String>,
+    handler: crate::ipc::IpcHandler,
+  ) -> Result<()> {
+    self.send(WebviewOp::RegisterIpc {
+      command: command.into(),
+      handler,
+    })
   }
 }

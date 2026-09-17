@@ -2819,6 +2819,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 name = "helloworld"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "surfman",
  "tauri-runtime",
  "tauri-runtime-servo",
@@ -8371,8 +8372,10 @@ name = "tauri-runtime-servo"
 version = "0.1.0"
 dependencies = [
  "euclid",
+ "http 1.5.0",
  "log",
  "raw-window-handle",
+ "serde_json",
  "servo",
  "servo-embedder-traits",
  "surfman",
