@@ -175,7 +175,7 @@ dependencies = [
  "objc2-core-graphics",
  "objc2-foundation",
  "parking_lot",
- "percent-encoding",
+ "percent-encoding 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "windows-sys 0.60.2",
  "wl-clipboard-rs",
  "x11rb",
@@ -891,7 +891,7 @@ dependencies = [
  "base64 0.22.1",
  "bitflags 2.13.2",
  "once_cell",
- "percent-encoding",
+ "percent-encoding 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex",
  "serde",
  "sha2",
@@ -1859,10 +1859,17 @@ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 [[package]]
 name = "form_urlencoded"
 version = "1.2.2"
+dependencies = [
+ "percent-encoding 2.3.2",
+]
+
+[[package]]
+name = "form_urlencoded"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
- "percent-encoding",
+ "percent-encoding 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2639,7 +2646,7 @@ dependencies = [
  "hyper",
  "ipnet",
  "libc",
- "percent-encoding",
+ "percent-encoding 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "pin-project-lite",
  "socket2",
  "tokio",
@@ -3162,8 +3169,6 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 [[package]]
 name = "idna"
 version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b0875f23caa03898994f6ddc501886a45c7d3d62d04d2d90788d47be1b1e4de"
 dependencies = [
  "idna_adapter",
  "smallvec",
@@ -4620,6 +4625,10 @@ dependencies = [
 [[package]]
 name = "percent-encoding"
 version = "2.3.2"
+
+[[package]]
+name = "percent-encoding"
+version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
@@ -4891,6 +4900,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08"
 dependencies = [
  "num-integer",
+]
+
+[[package]]
+name = "probe"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "surfman",
+ "tauri-runtime",
+ "tauri-runtime-servo",
+ "tauri-utils",
 ]
 
 [[package]]
@@ -5725,7 +5745,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
 dependencies = [
- "form_urlencoded",
+ "form_urlencoded 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "itoa",
  "ryu",
  "serde",
@@ -6629,7 +6649,7 @@ dependencies = [
  "mime",
  "num-traits",
  "parking_lot",
- "percent-encoding",
+ "percent-encoding 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.10.2",
  "resvg",
  "rustc-hash",
@@ -6813,7 +6833,7 @@ dependencies = [
  "num-traits",
  "num_cpus",
  "parking_lot",
- "percent-encoding",
+ "percent-encoding 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "phf 0.14.0",
  "postcard",
  "rand 0.10.2",
@@ -8431,12 +8451,10 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 [[package]]
 name = "url"
 version = "2.5.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
 dependencies = [
- "form_urlencoded",
+ "form_urlencoded 1.2.2",
  "idna",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "serde",
  "serde_derive",
 ]
@@ -8616,7 +8634,7 @@ dependencies = [
  "log",
  "mime",
  "mime_guess",
- "percent-encoding",
+ "percent-encoding 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "pin-project",
  "scoped-tls",
  "serde",
