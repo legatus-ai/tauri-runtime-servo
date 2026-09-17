@@ -10,8 +10,11 @@ description = "Tauri webview runtime backed by the Servo engine (in-process libs
 tauri-runtime.workspace = true
 tauri-utils = "=2.9.3"
 tao.workspace = true
-servo = { version = "0.5", features = ["no-wgl"] }
-servo-embedder-traits = "0.5"
+# Legatus engine line: local clone of legatus-ai/servo-engine, `legatus`
+# branch (sibling checkout; CI clones it beside this repo). This is how our
+# own engine fixes reach the runtime. Crates.io fallback: servo "0.5".
+servo = { path = "../../../servo-engine/components/servo", features = ["no-wgl"] }
+servo-embedder-traits = { path = "../../../servo-engine/components/shared/embedder" }
 euclid = "0.22"
 url = "2"
 raw-window-handle = "0.6"
