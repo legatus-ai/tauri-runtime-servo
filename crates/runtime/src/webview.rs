@@ -138,11 +138,16 @@ pub fn ensure_servo<'a, T: UserEvent>(
     ) {
       log::error!("servo runtime: failed to register ipc protocol: {error:?}");
     }
+    // App-critical web features that Servo gates behind prefs but ships
+    // working: IndexedDB (offline storage for desktop apps).
+    let mut preferences = servo::Preferences::default();
+    preferences.dom_indexeddb_enabled = true;
     let instance = ServoBuilder::default()
       .event_loop_waker(Box::new(ServoWaker {
         proxy: shared.proxy.clone(),
       }))
       .protocol_registry(protocols)
+      .preferences(preferences)
       .build();
     instance.setup_logging();
     *servo = Some(instance);

@@ -18,7 +18,22 @@ fn main() {
   let url = std::env::args()
     .nth(1)
     .unwrap_or_else(|| "about:blank".to_string());
-  let script = std::env::args().nth(2).unwrap_or("location.href".to_string());
+  // A script arg starting with `@` loads the script from that file path
+  // (argv cannot carry multiline JS reliably).
+  fn load_arg(raw: Option<String>) -> String {
+    match raw {
+      Some(path) if path.starts_with('@') => std::fs::read_to_string(&path[1..])
+        .unwrap_or_else(|error| panic!("probe: cannot read script file: {error}")),
+      Some(inline) => inline,
+      None => "location.href".to_string(),
+    }
+  }
+  let args: Vec<String> = std::env::args().collect();
+  let script = load_arg(args.get(2).cloned());
+  let poll = args
+    .get(3)
+    .map(|raw| load_arg(Some(raw.clone())))
+    .unwrap_or_default();
 
   let runtime = ServoRuntime::<AppEvent>::new(Default::default()).expect("runtime");
   let handle = runtime.handle();
@@ -40,6 +55,19 @@ fn main() {
 
     if let Some(attached) = detached.webview {
       std::thread::sleep(std::time::Duration::from_secs(6));
+      let script = if poll.is_empty() {
+        script
+      } else {
+        // Async protocol: run the setup script now, read window.__result
+        // after a delay with the poll script.
+        attached
+          .webview
+          .dispatcher
+          .eval_script(script)
+          .expect("setup eval");
+        std::thread::sleep(std::time::Duration::from_secs(8));
+        poll
+      };
       attached
         .webview
         .dispatcher
