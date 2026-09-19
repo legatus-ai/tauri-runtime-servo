@@ -138,10 +138,21 @@ pub fn ensure_servo<'a, T: UserEvent>(
     ) {
       log::error!("servo runtime: failed to register ipc protocol: {error:?}");
     }
-    // App-critical web features that Servo gates behind prefs but ships
-    // working: IndexedDB (offline storage for desktop apps).
+    // App-critical web features that Servo gates behind prefs: enable the
+    // batch, then keep only what probes functional (see probe matrix).
     let mut preferences = servo::Preferences::default();
     preferences.dom_indexeddb_enabled = true;
+    preferences.dom_async_clipboard_enabled = true;
+    preferences.dom_notification_enabled = true;
+    preferences.dom_fontface_enabled = true;
+    preferences.dom_resize_observer_enabled = true;
+    preferences.dom_intersection_observer_enabled = true;
+    preferences.dom_cookiestore_enabled = true;
+    preferences.dom_sanitizer_enabled = true;
+    preferences.dom_web_animations_enabled = true;
+    preferences.dom_exec_command_enabled = true;
+    preferences.dom_composition_event_enabled = true;
+    preferences.dom_storage_manager_api_enabled = true;
     let instance = ServoBuilder::default()
       .event_loop_waker(Box::new(ServoWaker {
         proxy: shared.proxy.clone(),
