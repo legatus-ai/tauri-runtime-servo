@@ -10,13 +10,19 @@ fixes on top. Rebase cadence: weekly (or when upstream lands something big).
 | Date | Upstream score | Upstream subtests | Our delta | Our line |
 |------|---------------|-------------------|-----------|----------|
 | 2026-09-17 | 66.43% (38600/58110) | 93.43% (2021567/2163669) | +11 subtests, 4 files | `legatus` @ 061fe8d6 on upstream 0f4d68e0 |
+| 2026-09-17 | 66.43% | 93.43% | +97 test-units, 9 files | `legatus` @ 5602860a (+ IndexedDB pref in runtime @ 808179e) |
 
 ## Our fixes (each verified live via `probe` before commit)
 
 1. Fragment `:target` before `load` — `url/data-uri-fragment.html` (+1)
 2. Unlabeled docs → windows-1252 — `encoding/sniffing.html` (+1)
 3. JSON docs → UTF-8 w/o charset — `encoding/json-document-utf8.html` (+3)
-4. Opaque-path trailing space → `%20` (rust-url fork) — `url/urlsearchparams-delete.any.js` (+4 html; worker variant same code path)
+4. Opaque-path trailing space → `%20` (rust-url fork) — `url/urlsearchparams-delete.any.js` (+4)
+5. `databases()` hides uncommitted state — `IndexedDB/get-databases.any.js` (+2)
+6. `IDBCursor.continue()` + `advance()` — `delete-range`, `idbcursor_continue_objectstore`, `idbcursor_advance_objectstore` (+44)
+7. Exhausted cursor → `null` result — `idbcursor-continue`, `idbcursor-advance` (+42)
+
+Worker/sharedworker variants share the fixed backend paths (window verified live).
 
 rust-url fork: 13 fixture expectations cleared, suite green.
 
